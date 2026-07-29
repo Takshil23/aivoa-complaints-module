@@ -1,0 +1,41 @@
+From: s.iyer@abcformulations-example.com
+To: qa.complaints@zenithlifesciences-example.com
+Cc: purchase@abcformulations-example.com
+Date: Mon, 27 Jul 2026 09:14:22 +0530
+Subject: URGENT - Foreign particles found in Ibuprofen BP batch IBU260415C
+
+Dear Zenith QA team,
+
+We are writing to raise a formal quality complaint regarding a consignment
+received at our Baddi Unit II facility on 22 July 2026.
+
+Product:            Ibuprofen BP (API)
+Grade:              BP/EP
+Batch / Lot No.:    IBU260415C
+Manufacturing date: 15 April 2026
+Retest date:        14 April 2029
+Quantity supplied:  300 kg (12 fibre drums)
+Quantity affected:  50 kg (2 fibre drums)
+
+During incoming quality inspection our QC analysts observed translucent
+fibrous strands, approximately 3-8 mm long, in the powder of two drums
+(drum serials 07 and 11). Both drums were sealed and undamaged on arrival.
+The material in both drums has been quarantined and is not released for
+manufacturing.
+
+Given that this is the second foreign matter observation from your Ankleshwar
+site this year, we request:
+
+  1. A laboratory investigation with particle identification.
+  2. A review of the manufacturing and packing records for this batch.
+  3. Your CAPA response within 15 working days.
+
+We are holding the remaining 10 drums pending your reply.
+
+Regards,
+S. Iyer
+Head - Quality Control
+ABC Formulations Ltd.
+
+--
+This is a fictional email created for a technical assessment demonstration.

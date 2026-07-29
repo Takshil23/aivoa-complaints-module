@@ -1,0 +1,23 @@
+# --- Web layer ---
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+python-multipart==0.0.20
+pydantic==2.10.5
+pydantic-settings==2.7.1
+
+# --- AI agent layer (mandatory stack) ---
+langgraph==0.2.62
+langchain-core==0.3.29
+langchain-groq==0.2.3
+
+# --- Database (mandatory stack) ---
+SQLAlchemy==2.0.36
+psycopg[binary]==3.2.3        # PostgreSQL driver
+PyMySQL==1.1.1                # MySQL driver (alternative)
+
+# --- Document extraction ---
+pdfplumber==0.11.4
+pypdf==5.1.0
+
+# --- Utilities ---
+python-dotenv==1.0.1
