@@ -55,6 +55,16 @@ _QUESTION_HINTS = re.compile(
     r"^\s*(what|why|how|who|when|which|is|are|can|could|does|do|explain|tell me)\b",
     re.IGNORECASE,
 )
+# Something that could plausibly be complaint content: a quantity, a batch-shaped
+# token, a date, or pharmaceutical vocabulary. Used to refuse to open a record for
+# a message like "hello" or "i dont have that".
+_COMPLAINT_SIGNAL = re.compile(
+    r"\d|\b(batch|lot|capsule|tablet|vial|ampoule|drum|bottle|blister|api|"
+    r"complaint|defect|discolo|contaminat|particle|foreign|expiry|expired|"
+    r"manufactur|pharmacy|hospital|distributor|formulation|quantity|damaged|"
+    r"broken|leak|label|seal|reported|received|shipment)\w*",
+    re.IGNORECASE,
+)
 
 
 def _has_complaint(state: AgentState) -> bool:
@@ -74,6 +84,13 @@ def router_node(state: AgentState) -> dict[str, Any]:
         return {"route": ROUTE_ANSWER}
 
     loaded = _has_complaint(state)
+
+    # A message with nothing complaint-shaped in it never opens a record, whatever
+    # the model thinks. Asked to log "i dont have that", a small model returned a
+    # complete fabricated complaint built from the examples in its own prompt.
+    if not _COMPLAINT_SIGNAL.search(text):
+        logger.info("router -> answer_question (no complaint signal in message)")
+        return {"route": ROUTE_ANSWER}
 
     # Preferred path: let the router model pick a tool.
     if settings.llm_enabled:

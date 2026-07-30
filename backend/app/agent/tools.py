@@ -17,10 +17,13 @@ from app.agent import prompts
 from app.agent.llm import LLMUnavailable, json_call
 from app.config import settings
 from app.services import fallback_extractor as fb
+from app.services import grounding
 from app.services.form_schema import (
     NOT_PROVIDED,
+    STATUS_PENDING,
     STATUS_READY,
     apply_patch,
+    empty_schema,
     flatten,
     label_map,
     populated_schema,
@@ -64,7 +67,7 @@ def log_complaint(raw_text: str) -> dict[str, Any]:
     else:
         result = fb.extract(raw_text)
 
-    return _build_populated(result)
+    return _build_populated(result, source=raw_text)
 
 
 # --- Tool 2: Edit Complaint --------------------------------------------------
@@ -99,6 +102,19 @@ def edit_complaint(
                     if k in labels and str(v).strip()
                 }
             )
+            # The officer's instruction is the source here: a corrected batch
+            # number has to be one they actually typed.
+            unsupported = [
+                k
+                for k, v in patch.items()
+                if k in grounding.GROUNDED_FIELDS
+                and not grounding.is_supported(v, instruction)
+            ]
+            for key in unsupported:
+                logger.warning(
+                    "edit_complaint: dropping ungrounded %s=%r", key, patch[key]
+                )
+                patch.pop(key)
             if result.get("risk"):
                 new_risk.update(
                     {k: str(v) for k, v in result["risk"].items() if str(v).strip()}
@@ -153,8 +169,10 @@ def extract_document(document_text: str, filename: str = "") -> dict[str, Any]:
     else:
         result = fb.extract(document_text)
 
-    state = _build_populated(result)
+    state = _build_populated(result, source=document_text)
     state["tool_used"] = "extract_document"
+    if state["status"] == STATUS_PENDING:  # nothing groundable in the document
+        return state
 
     # The prompt asks the model to quote the reference and to close on the demo's
     # sign-off line. Only repair what it actually missed — unconditionally wrapping
@@ -175,7 +193,29 @@ def extract_document(document_text: str, filename: str = "") -> dict[str, Any]:
 
 # --- shared -------------------------------------------------------------------
 
-def _build_populated(result: dict[str, Any]) -> dict[str, Any]:
+def _nothing_to_log(invented: bool) -> dict[str, Any]:
+    """The message carried no complaint. Say so; do not populate the form.
+
+    `invented` is True when the model *did* return values and grounding threw
+    them away — worth a distinct reply, because the officer would otherwise see
+    a form flash and then not fill.
+    """
+    logger.info("nothing to log (model invented values: %s)", invented)
+    return {
+        "form_sections": empty_schema(),
+        "risk": {},
+        "status": STATUS_PENDING,
+        "reply": (
+            "I couldn't find any complaint details in that. Paste the customer's "
+            "message or upload the complaint report, and I'll extract the product, "
+            "batch and defect information."
+        ),
+        "tool_used": "log_complaint",
+        "patch": {},
+    }
+
+
+def _build_populated(result: dict[str, Any], *, source: str = "") -> dict[str, Any]:
     fields = _sanitize({k: str(v) for k, v in (result.get("fields") or {}).items()})
     for key in (
         "complaint_source",
@@ -195,6 +235,14 @@ def _build_populated(result: dict[str, Any]) -> dict[str, Any]:
 
     inferred = {str(k) for k in (result.get("inferred_fields") or [])}
     risk = {k: str(v) for k, v in (result.get("risk") or {}).items()}
+
+    # Nothing reaches a regulated record that the source did not say.
+    if source:
+        fields, dropped = grounding.ground(
+            fields, source, inferred, not_provided=NOT_PROVIDED
+        )
+        if not grounding.has_complaint(fields, not_provided=NOT_PROVIDED):
+            return _nothing_to_log(bool(dropped))
 
     return {
         "form_sections": populated_schema(

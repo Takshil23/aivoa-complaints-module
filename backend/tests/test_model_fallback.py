@@ -168,7 +168,11 @@ def test_extract_reply_does_not_double_narrate(monkeypatch):
             ),
         },
     )
-    reply = T.extract_document("...", "complaint.pdf")["reply"]
+    document = (
+        "Complaint No: CC-2026-00154\nComplainant: ABC Formulations Ltd.\n"
+        "Product Name | Metformin Hydrochloride API\n"
+    )
+    reply = T.extract_document(document, "complaint.pdf")["reply"]
     assert reply.count("Form populated on the left.") == 1
     assert reply.count("CC-2026-00154") == 1
     L.reset_model_cache()

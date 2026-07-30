@@ -241,6 +241,33 @@ def check_router() -> bool:
     return ok
 
 
+def check_refuses_to_fabricate() -> bool:
+    """The single most dangerous failure: a message with no complaint in it.
+
+    Observed against a live model before grounding existed — "i dont have that"
+    produced a full record with an invented batch number, marked Ready to Commit.
+    """
+    head("3b. Refusal to fabricate")
+    ok = True
+    for message in ("i dont have that", "Hello", "ok thanks"):
+        state = T.log_complaint(message)
+        fields = flatten(state["form_sections"])
+        invented = {
+            k: v for k, v in fields.items() if v and v.lower() != "not provided"
+        }
+        ok &= require(
+            not invented,
+            f"no record fabricated from {message!r}",
+            f"invented {invented}" if invented else "",
+        )
+        ok &= require(
+            state["status"] != "ready_to_commit",
+            f"{message!r} does not reach Ready to Commit",
+            state["status"],
+        )
+    return ok
+
+
 def check_log_complaint() -> dict[str, Any]:
     head("4. Tool 1 - log_complaint (demo turn 1, FDF case)")
     prompt = (
@@ -533,6 +560,7 @@ def main() -> int:
 
     check_json_mode()
     check_router()
+    check_refuses_to_fabricate()
     logged = check_log_complaint()
     check_edit_complaint(logged)
     extracted = check_extract_document()
