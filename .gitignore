@@ -29,6 +29,10 @@ yarn-error.log*
 # --- Editors / OS ---
 .vscode/
 .idea/
+# Accumulated per-machine tool approvals, with absolute temp paths in them.
+# .claude/launch.json is shared config and stays tracked.
+.claude/settings.json
+.claude/settings.local.json
 .DS_Store
 Thumbs.db
 
