@@ -70,10 +70,39 @@ rails. Needs a running server. It commits real complaints, so start that server
 against a scratch `DATABASE_URL` unless you want them in the demo ledger.
 
 ```bash
+cd backend && .venv\Scripts\python.exe scripts/verify_db.py
+```
+
+Proves the schema on whatever `DATABASE_URL` points at — JSON round-trip, the
+complaint-number sequence, the batch index, cascade delete. Says so loudly if it
+is still pointed at SQLite.
+
+```bash
 python samples/generate_samples.py
 ```
 
 Regenerates the three fictional complaint documents (needs `reportlab`).
+
+## Local PostgreSQL (this machine)
+
+Installed without admin rights as a self-contained folder, so there is **no
+Windows service and it does not start on boot**. Start it before the backend:
+
+```powershell
+& "C:\Users\taksh\postgres\pgsql\bin\pg_ctl.exe" -D "C:\Users\taksh\postgres\data" -l "C:\Users\taksh\postgres\server.log" start
+& "C:\Users\taksh\postgres\pgsql\bin\pg_ctl.exe" -D "C:\Users\taksh\postgres\data" status
+& "C:\Users\taksh\postgres\pgsql\bin\pg_ctl.exe" -D "C:\Users\taksh\postgres\data" stop
+```
+
+PostgreSQL 17.6. Superuser `postgres`/`postgres`, app role `aivoa`/`aivoa`,
+databases `aivoa` (demo) and `aivoa_verify` (scratch, for `verify_api.py` so demo
+complaints stay out of the real ledger). `pg_hba.conf` is set to `scram-sha-256`
+rather than the `initdb` default of `trust`, so those passwords are actually
+required. Localhost only — these credentials are development-grade by intent.
+
+**If the backend fails with "connection refused", Postgres is not running.**
+That is the cost of the no-admin install; a normal installer would register a
+service instead.
 
 ## The three mandatory AI tools
 
@@ -120,14 +149,20 @@ calling, all three tools replaying the demo script, and all four LLM bonus featu
 Primary role is served by `llama-3.1-8b-instant`, router by
 `llama-3.3-70b-versatile`.
 
+**PostgreSQL is now the database** — `verify_db.py` passes 23/23 against a real
+17.6 server and `verify_api.py` passes 65/65 driving the whole demo over HTTP
+against it. Timestamps come back timezone-aware there, where SQLite dropped the
+tzinfo.
+
 **Still to verify:**
 
-1. **Only SQLite has connected.** Drivers for Postgres and MySQL are installed and
-   the models use portable JSON columns, but a real server has not been tested. The
-   brief mandates MySQL/Postgres — switch `DATABASE_URL` and confirm.
-2. **The UI has never driven the LLM path.** Only the harness has. Run both servers
-   and walk the four demo turns through the browser, watching the SSE stages and
-   the `AI INFERRED` badges.
+1. **The UI has never driven the LLM path.** Only the harnesses have. Run both
+   servers and walk the four demo turns through the browser, watching the SSE
+   stages and the `AI INFERRED` badges.
+2. **Groq free-tier rate limits will bite during a 10–15 minute recording.** The
+   limit is per-minute and recovers on its own; bonus features now return a clean
+   429 rather than the provider's raw body. If it happens mid-take, wait ten
+   seconds and retry rather than re-recording.
 
 ## First-contact bugs the LLM path exposed (all fixed)
 

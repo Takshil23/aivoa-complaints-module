@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as OrmSession
 
 from app.agent import tools as T
-from app.agent.llm import LLMUnavailable, active_model
+from app.agent.llm import LLMRateLimited, LLMUnavailable, active_model
 from app.config import settings
 from app.db.session import get_db
 from app.services import session_service as svc
@@ -150,6 +150,15 @@ def bonus_feature(
             "feature": feature,
             "result": handler(record.form_sections, record.risk),
         }
+    except LLMRateLimited as exc:
+        # 429 with a clean sentence, not the provider's raw body — which carries
+        # the organisation id.
+        headers = (
+            {"Retry-After": str(int(exc.retry_after) + 1)} if exc.retry_after else {}
+        )
+        raise HTTPException(
+            status_code=429, detail=str(exc), headers=headers
+        ) from exc
     except LLMUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:

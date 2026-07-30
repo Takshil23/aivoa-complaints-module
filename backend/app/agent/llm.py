@@ -42,6 +42,9 @@ _MODEL_GONE = re.compile(
 _JSON_MODE_UNSUPPORTED = re.compile(
     r"response_format|json_object|json_validate_failed", re.IGNORECASE
 )
+_RATE_LIMITED = re.compile(r"rate.?limit|429|too many requests", re.IGNORECASE)
+# Groq phrases it as "Please try again in 7.66s".
+_RETRY_AFTER = re.compile(r"try again in\s+([\d.]+)\s*s", re.IGNORECASE)
 
 T = TypeVar("T")
 
@@ -52,6 +55,32 @@ _active: dict[str, str] = {}
 
 class LLMUnavailable(RuntimeError):
     """Raised when no Groq key is configured, or Groq cannot be reached."""
+
+
+class LLMRateLimited(RuntimeError):
+    """Groq's per-minute quota is exhausted.
+
+    Separate from LLMUnavailable because it is temporary and the officer can
+    simply try again — and because the provider's raw 429 body carries the
+    organisation id, which has no business being rendered in the UI.
+    """
+
+    def __init__(self, retry_after: float | None = None) -> None:
+        self.retry_after = retry_after
+        wait = (
+            f" Try again in about {retry_after:.0f} seconds."
+            if retry_after
+            else " Try again shortly."
+        )
+        super().__init__("Groq's rate limit for this key is exhausted." + wait)
+
+
+def _classify(exc: Exception) -> Exception:
+    """Turn a provider error into something safe to show a QA officer."""
+    if _RATE_LIMITED.search(str(exc)):
+        match = _RETRY_AFTER.search(str(exc))
+        return LLMRateLimited(float(match.group(1)) if match else None)
+    return exc
 
 
 def active_model(kind: str = "primary") -> str:
@@ -142,7 +171,7 @@ def _with_fallback(kind: str, run: Callable[[str], T]) -> T:
             result = run(model)
         except Exception as exc:  # noqa: BLE001 - classified below
             if not _MODEL_GONE.search(str(exc)):
-                raise
+                raise _classify(exc) from exc
             logger.warning(
                 "Groq model %r is unavailable for %s (%s); trying next in chain",
                 model,

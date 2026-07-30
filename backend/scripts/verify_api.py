@@ -311,6 +311,16 @@ def main() -> int:
         started = time.time()
         response = client.post(f"/api/ai/{feature}", json={"sessionId": sid},
                                timeout=120)
+        if response.status_code == 429:
+            # Free-tier quota, not a defect — but assert it degraded cleanly.
+            detail = response.json().get("detail", "")
+            record(WARN, f"/api/ai/{feature}", f"rate limited: {detail}")
+            require(
+                "org_" not in detail and "{" not in detail,
+                f"/api/ai/{feature}: rate limit shown as a clean sentence",
+                detail[:120],
+            )
+            continue
         if response.status_code != 200:
             record(FAIL, f"/api/ai/{feature}",
                    f"HTTP {response.status_code}: {response.text[:160]}")

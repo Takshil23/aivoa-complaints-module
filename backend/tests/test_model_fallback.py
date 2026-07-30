@@ -80,6 +80,28 @@ def test_other_errors_do_not_advance_the_chain(with_key):
     assert tried == ["gemma2-9b-it"]
 
 
+def test_rate_limit_is_classified_and_stripped(with_key):
+    """Groq's 429 body carries the organisation id — the officer must never see it."""
+    raw = (
+        "Error code: 429 - {'error': {'message': 'Rate limit reached for model "
+        "`llama-3.1-8b-instant` in organization `org_01kyr4pt2cf4hs01x` service "
+        "tier `on_demand` on requests per minute (RPM): Limit 30, Used 30. "
+        "Please try again in 7.66s.', 'type': 'requests', 'code': "
+        "'rate_limit_exceeded'}}"
+    )
+
+    def run(model: str):
+        raise RuntimeError(raw)
+
+    with pytest.raises(L.LLMRateLimited) as caught:
+        L._with_fallback("primary", run)
+
+    message = str(caught.value)
+    assert "org_01kyr4pt2cf4hs01x" not in message
+    assert "8 seconds" in message or "Try again in about 8 seconds." in message
+    assert caught.value.retry_after == pytest.approx(7.66)
+
+
 def test_all_models_gone_raises_llm_unavailable(with_key):
     def run(model: str):
         raise RuntimeError(DECOMMISSIONED)
