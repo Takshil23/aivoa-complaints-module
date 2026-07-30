@@ -111,15 +111,41 @@ uvicorn app.main:app --reload --port 8000
 
 API docs at <http://127.0.0.1:8000/docs>.
 
-Once the key is in place, confirm the whole LLM stack in one shot — the model
-chains, native tool calling, the three mandatory tools replaying the demo script,
-and the bonus features:
+Without a key the app still runs, on the deterministic fallback extractor.
+
+### Verifying it actually works
+
+Three scripts, one per layer, because "it works" is claimed at three different
+levels. Each prints a pass/fail line per check and exits non-zero on failure.
 
 ```bash
-python scripts/verify_llm.py
+python scripts/verify_llm.py          # needs GROQ_API_KEY
 ```
 
-Without a key the app still runs, on the deterministic fallback extractor.
+Probes every model in both chains, then replays the demo script from
+[docs/REFERENCE-SPEC.md](docs/REFERENCE-SPEC.md) §4 through the three mandatory
+tools and the four LLM bonus features, diffing against the reference values.
+Wording differences are warnings; structural breaks are failures — a sparse patch
+touching an unnamed field, the complainant confused with the manufacturer, the
+`Product Strength/Grade` label failing to switch, severity not escalating, or a
+prompt-example value leaking into a record. `--probe` checks the models only.
+
+```bash
+python scripts/verify_api.py --base http://127.0.0.1:8000   # needs the server up
+```
+
+The same demo driven over HTTP exactly as the browser drives it: SSE framing,
+progress stages, attachment cards, ledger commit, duplicate detection, guard
+rails. It commits real complaints, so point the server at a scratch
+`DATABASE_URL` first unless you want them in your ledger.
+
+```bash
+python scripts/verify_db.py --url postgresql+psycopg://aivoa:aivoa@localhost:5432/aivoa
+```
+
+Proves the schema on a real server: JSON round-trip with nesting and non-ASCII,
+the complaint-number sequence, the batch index behind duplicate detection,
+cascade delete, cleanup.
 
 ### Frontend
 
@@ -133,7 +159,15 @@ Open <http://localhost:5173>. Vite proxies `/api` to port 8000.
 
 ### Database
 
-Set one line in `backend/.env`:
+On a fresh server the database itself does not exist yet — SQLAlchemy creates
+tables, never databases. This creates it and prints the URL to paste, without
+needing `psql` or `mysql` on your PATH:
+
+```bash
+python scripts/create_db.py --admin postgresql+psycopg://postgres:PASSWORD@localhost:5432/postgres --app-user aivoa
+```
+
+Then set one line in `backend/.env`:
 
 ```bash
 DATABASE_URL=postgresql+psycopg://aivoa:aivoa@localhost:5432/aivoa
@@ -143,7 +177,8 @@ DATABASE_URL=postgresql+psycopg://aivoa:aivoa@localhost:5432/aivoa
 DATABASE_URL=mysql+pymysql://aivoa:aivoa@localhost:3306/aivoa
 ```
 
-Tables are created on startup — no migration step needed.
+Tables are created on startup — no migration step needed. Confirm the server is
+really usable with `python scripts/verify_db.py`.
 
 > **Running without a Groq key.** The app still works: it falls back to a
 > deterministic regex extractor so the UI, streaming, database and tests are all
