@@ -46,6 +46,20 @@ assignment explicitly allows that model "for context". Both are configurable in
 `.env`, and the router degrades to a deterministic heuristic if tool calling is
 unavailable. Full reasoning in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
+> **Note on model availability.** Groq **decommissioned `gemma2-9b-it` on
+> 2025-10-08**, after the assignment was written, and `llama-3.3-70b-versatile` is
+> scheduled for shutdown on **2026-08-16**. The mandated model is therefore still
+> the one the code *requests first* — the brief asks for it, and `PRIMARY_MODEL`
+> is unchanged — but each role is a chain: when Groq answers
+> `model_decommissioned`, the next model in `PRIMARY_MODEL_FALLBACKS` /
+> `ROUTER_MODEL_FALLBACKS` serves the request, the dead id is remembered for the
+> process, and `POST /api/session` reports both what was requested and what is
+> actually serving (`models.activePrimary`). Defaults follow Groq's own
+> replacement guidance: `llama-3.1-8b-instant` for the primary role,
+> `openai/gpt-oss-120b` for the router. Verify against
+> <https://console.groq.com/docs/deprecations> and run
+> `python scripts/verify_llm.py --probe` to see which ids are live today.
+
 ---
 
 ## 2. The three mandatory AI tools
@@ -96,6 +110,16 @@ uvicorn app.main:app --reload --port 8000
 ```
 
 API docs at <http://127.0.0.1:8000/docs>.
+
+Once the key is in place, confirm the whole LLM stack in one shot — the model
+chains, native tool calling, the three mandatory tools replaying the demo script,
+and the bonus features:
+
+```bash
+python scripts/verify_llm.py
+```
+
+Without a key the app still runs, on the deterministic fallback extractor.
 
 ### Frontend
 

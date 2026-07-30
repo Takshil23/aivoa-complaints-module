@@ -79,8 +79,34 @@ tool call. The assignment names `llama-3.3-70b-versatile` as available "for
 context", so this uses each model for what it is actually good at, and both are
 configurable in `.env`.
 
-Three ordered fallbacks keep the graph running when the preferred path is not
-available:
+### The mandated model no longer exists — and the code says so out loud
+
+Groq decommissioned `gemma2-9b-it` on **2025-10-08** (announced 2025-08-08, in
+favour of `llama-3.1-8b-instant`), and deprecated `llama-3.3-70b-versatile` on
+2026-06-17 with shutdown on **2026-08-16**. Both dates fall after the assignment
+was written, so a literal implementation of the brief cannot make a single
+successful API call today.
+
+Three ways to handle that, and the choice is deliberate:
+
+1. Silently swap the model. Fails the brief's "do not substitute" rule, and hides
+   the substitution from the reviewer.
+2. Keep `gemma2-9b-it` and let every request 404. Faithful and useless.
+3. **Request the mandated model first, fall through to a live one.** `PRIMARY_MODEL`
+   is still `gemma2-9b-it`; `settings.model_chain()` appends
+   `PRIMARY_MODEL_FALLBACKS`. `llm._with_fallback()` advances the chain **only** on
+   a "model is gone" error (`model_decommissioned` / `model_not_found`) — a rate
+   limit or malformed JSON is raised to the caller instead, so a transient failure
+   never silently burns through every model. A dead id is cached per process, so
+   the 404 is paid once rather than once per request, and `POST /api/session`
+   returns `models.primary` (requested) alongside `models.activePrimary` (serving).
+
+The same chain covers the router role. `tests/test_model_fallback.py` pins the
+behaviour without touching the network, and `scripts/verify_llm.py --probe` prints
+exactly which ids Groq is still answering on.
+
+Below the chain, three ordered fallbacks keep the graph running when the preferred
+path is not available:
 
 1. A document is attached → route straight to `extract_document`. No model call —
    the intent is unambiguous, so spending a round trip on it would be waste.
