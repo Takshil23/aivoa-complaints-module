@@ -50,6 +50,27 @@ def test_is_supported(value, supported):
     assert grounding.is_supported(value, SOURCE) is supported
 
 
+def test_run_on_batch_number_is_still_supported():
+    """The officer types "CHG 260712Aand affected" with no space, so the source
+    token is "260712aand" and the correctly-split value is only a prefix of it.
+    Grounding must not reject the very value clean_batch exists to produce."""
+    instruction = (
+        "ah sorry the batch number is CHG 260712Aand affected quantity is "
+        "50 kg (2 HDPE Drum)"
+    )
+    assert grounding.is_supported("CHG 260712A", instruction)
+    assert grounding.is_supported("50 kg (2 HDPE Drum)", instruction)
+    # …but the prefix rule must not admit a different batch entirely.
+    assert not grounding.is_supported("CHG 999999X", instruction)
+
+
+def test_prefix_rule_does_not_admit_invented_values():
+    source = "Batch number AMX240602 was received on Tuesday."
+    assert grounding.is_supported("AMX240602", source)
+    assert not grounding.is_supported("AMX500123", source)
+    assert not grounding.is_supported("AMX24060299", source)
+
+
 def test_ground_blanks_only_the_unsupported():
     fields = {
         "product_name": "Amoxicillin Capsules",   # in source

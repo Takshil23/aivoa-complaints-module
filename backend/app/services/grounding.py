@@ -50,12 +50,22 @@ def _tokens(text: str) -> list[str]:
     return [t for t in _WORD.findall(text.lower()) if len(t) > 1]
 
 
+_RUN_ON_MIN = 4  # below this, a prefix match is noise rather than evidence
+
+
 def is_supported(value: str, source: str) -> bool:
     """Does `source` actually contain the substance of `value`?
 
     Token containment rather than substring, so a model that reformats
     "Batch No. AMX240602" to "AMX240602", or drops a comma, still passes — while
     "Amoxicillin Capsules" invented out of a prompt example does not.
+
+    A token also counts as supported when a source token *starts with* it. That
+    is the officer typing "CHG 260712Aand affected": the batch runs into the next
+    word, so the correctly-split "260712a" is only a prefix of the source's
+    "260712aand". Restricted to tokens of four characters or more, and only in
+    that direction, so an invented "AMX500123" still fails against a source
+    containing "AMX240602".
     """
     if (value or "").strip().lower() in _PLACEHOLDER:
         return True  # nothing asserted, nothing to ground
@@ -65,7 +75,15 @@ def is_supported(value: str, source: str) -> bool:
         return True  # e.g. a value that is only punctuation
 
     haystack = set(_tokens(source))
-    return all(token in haystack for token in needles)
+
+    def supported(token: str) -> bool:
+        if token in haystack:
+            return True
+        return len(token) >= _RUN_ON_MIN and any(
+            word.startswith(token) for word in haystack
+        )
+
+    return all(supported(token) for token in needles)
 
 
 def ground(

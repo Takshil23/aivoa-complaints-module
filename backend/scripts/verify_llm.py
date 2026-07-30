@@ -100,13 +100,12 @@ _ECHOES = (
 # worst failure mode available, because the output looks plausible.
 _EXAMPLE_LEAKS = (
     "Nordic Pharma",
-    "Ibuprofen",
-    "IBU250114",
-    "blister strip",
-    "Blister Foil",
+    "Cetirizine",
+    "CTZ250114",
+    "closure liner",
     "CC-2025-00087",
-    "sealing-station",
-    "sealing station",
+    "capping-station",
+    "capping station",
     "label reel",
     "print station",
 )

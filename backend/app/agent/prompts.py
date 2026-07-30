@@ -94,24 +94,24 @@ complaint and exist only to show the format — do not carry any of them over:
   "fields": {{
     "complaint_source": "Distributor",
     "customer_name": "Nordic Pharma Distribution AB",
-    "product_name": "Ibuprofen Tablets",
-    "product_strength": "200 mg",
-    "batch_lot_number": "IBU250114",
-    "affected_quantity": "3 blister strips",
+    "product_name": "Cetirizine Oral Solution",
+    "product_strength": "5 mg/5 mL",
+    "batch_lot_number": "CTZ250114",
+    "affected_quantity": "4 bottles",
     "manufacturing_date": "January 2025",
     "expiry_date": "December 2027",
     "originating_site_block": "Packaging",
-    "impacted_npm": "Blister Foil",
+    "impacted_npm": "Primary Packaging (Bottle)",
     "complaint_category": "Packaging Defect",
-    "complaint_description": "Nordic Pharma Distribution AB reported three blister strips with incompletely sealed pockets. Requesting investigation of the sealing station and replacement stock."
+    "complaint_description": "Nordic Pharma Distribution AB reported four bottles with a loose closure liner. Requesting investigation of the capping station and replacement stock."
   }},
   "risk": {{
     "severity": "Major",
     "suggested_next_action": "Route to QA Investigation & Issue Replacement",
-    "initial_risk_assessment": "Probable sealing-station temperature excursion during packaging. No route to patient harm identified; product integrity beyond the affected strips is unverified."
+    "initial_risk_assessment": "Probable capping-station torque deviation during packaging. No route to patient harm identified; product integrity beyond the affected bottles is unverified."
   }},
   "inferred_fields": ["originating_site_block", "impacted_npm", "complaint_category"],
-  "reply": "Complaint parsed successfully. I've extracted the product and batch details for the Ibuprofen packaging defect and generated an initial risk assessment."
+  "reply": "Complaint parsed successfully. I've extracted the product and batch details for the Cetirizine packaging defect and generated an initial risk assessment."
 }}
 """
 
@@ -176,25 +176,25 @@ carry any of them over:
   "fields": {{
     "complaint_source": "Distributor",
     "customer_name": "Nordic Pharma Distribution AB",
-    "product_name": "Ibuprofen Tablets",
-    "product_strength": "200 mg",
-    "batch_lot_number": "IBU250114",
-    "affected_quantity": "3 blister strips",
+    "product_name": "Cetirizine Oral Solution",
+    "product_strength": "5 mg/5 mL",
+    "batch_lot_number": "CTZ250114",
+    "affected_quantity": "4 bottles",
     "manufacturing_date": "January 2025",
     "expiry_date": "December 2027",
     "originating_site_block": "Packaging",
-    "impacted_npm": "Blister Foil",
+    "impacted_npm": "Primary Packaging (Bottle)",
     "complaint_category": "Packaging Defect",
-    "complaint_description": "Nordic Pharma Distribution AB reported three blister strips with incompletely sealed pockets during goods-in inspection. Stock has been held pending investigation."
+    "complaint_description": "Nordic Pharma Distribution AB reported four bottles with a loose closure liner during goods-in inspection. Stock has been held pending investigation."
   }},
   "risk": {{
     "severity": "Major",
     "suggested_next_action": "Route to QA Investigation & Issue Replacement",
-    "initial_risk_assessment": "Probable sealing-station temperature excursion during packaging. No route to patient harm identified."
+    "initial_risk_assessment": "Probable capping-station torque deviation during packaging. No route to patient harm identified."
   }},
   "inferred_fields": ["originating_site_block", "impacted_npm"],
   "document_reference": "CC-2025-00087",
-  "reply": "I've extracted complaint report CC-2025-00087 from Nordic Pharma Distribution AB. The issue is an incomplete blister seal on Ibuprofen Tablets. Form populated on the left."
+  "reply": "I've extracted complaint report CC-2025-00087 from Nordic Pharma Distribution AB. The issue is a loose closure liner on Cetirizine Oral Solution. Form populated on the left."
 }}
 """
 
