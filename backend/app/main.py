@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.agent import llm
 from app.api import chat, complaints, documents
 from app.config import settings
 from app.db.session import init_db
@@ -23,11 +25,25 @@ logger = logging.getLogger("aivoa")
 async def lifespan(_: FastAPI):
     init_db()
     if settings.llm_enabled:
-        logger.info(
-            "Groq enabled — primary=%s router=%s",
-            settings.primary_model,
-            settings.router_model,
-        )
+        # Settle the model chains now rather than on the officer's first message.
+        # The assignment mandates gemma2-9b-it, which Groq decommissioned on
+        # 2025-10-08, so this is where the substitution actually happens — and it
+        # is logged loudly, because it is a deviation from the brief.
+        resolved = await asyncio.to_thread(llm.resolve_chains)
+        for role, requested in (
+            ("primary", settings.primary_model),
+            ("router", settings.router_model),
+        ):
+            serving = resolved.get(role)
+            if serving and serving != requested:
+                logger.warning(
+                    "%s role: %s is unavailable on Groq — serving with %s instead",
+                    role,
+                    requested,
+                    serving,
+                )
+            else:
+                logger.info("%s role: %s", role, serving or requested)
     else:
         logger.warning(
             "GROQ_API_KEY is not set. Running on the deterministic fallback "
@@ -68,5 +84,7 @@ def health() -> dict:
         "llmEnabled": settings.llm_enabled,
         "primaryModel": settings.primary_model,
         "routerModel": settings.router_model,
+        "activePrimaryModel": llm.active_model("primary"),
+        "activeRouterModel": llm.active_model("router"),
         "database": settings.database_url.split("://", 1)[0],
     }

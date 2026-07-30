@@ -500,6 +500,27 @@ button {
   color: var(--slate-500);
 }
 
+/* Which model is really answering. The assignment mandates gemma2-9b-it, which
+   Groq has since decommissioned, so the substitution is stated in the UI rather
+   than hidden in a config file. */
+.copilot__model {
+  margin: 4px 0 0;
+  font-size: 11.5px;
+  color: var(--slate-400, var(--slate-500));
+  letter-spacing: 0.01em;
+}
+
+.copilot__model code {
+  font-family: inherit;
+  font-weight: 600;
+}
+
+.copilot__model--substituted code:first-of-type {
+  text-decoration: line-through;
+  font-weight: 500;
+  opacity: 0.75;
+}
+
 .state-dot {
   width: 9px;
   height: 9px;

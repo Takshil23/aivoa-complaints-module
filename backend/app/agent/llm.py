@@ -69,6 +69,30 @@ def mark_dead(model: str) -> None:
         _dead.add(model)
 
 
+def resolve_chains() -> dict[str, str]:
+    """Settle which model serves each role, once, at startup.
+
+    Without this the first officer's message pays a wasted round trip to a
+    decommissioned model before the chain moves on, and `GET /api/session` would
+    report the requested model as active until someone had sent a message. One
+    single-token call per role at boot buys an honest answer and a faster first
+    complaint. Never fatal: if Groq is unreachable the chain resolves lazily as
+    before.
+    """
+    if not settings.llm_enabled:
+        return {}
+
+    resolved: dict[str, str] = {}
+    for kind in ("primary", "router"):
+        try:
+            _with_fallback(kind, lambda model: _build(model).invoke([("human", "ok")]))
+            resolved[kind] = active_model(kind)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("could not resolve the %s model chain at startup: %s",
+                           kind, exc)
+    return resolved
+
+
 def reset_model_cache() -> None:
     """Forget which models are dead. Used by tests and the verify script."""
     with _lock:

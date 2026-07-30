@@ -53,6 +53,38 @@ function TypingCard() {
   );
 }
 
+/**
+ * Names the model actually answering.
+ *
+ * The assignment mandates `gemma2-9b-it`, which Groq decommissioned on
+ * 2025-10-08. The backend still requests it first and falls through to a live
+ * model, so this states the substitution on screen rather than leaving it in a
+ * config file for someone to discover.
+ */
+function ModelLine({ llmEnabled, models }) {
+  if (!llmEnabled || !models?.primary) return null;
+
+  const requested = models.primary;
+  const serving = models.activePrimary || requested;
+
+  if (serving === requested) {
+    return (
+      <p className="copilot__model">
+        Agent <code>{requested}</code>
+      </p>
+    );
+  }
+
+  return (
+    <p
+      className="copilot__model copilot__model--substituted"
+      title={`${requested} was decommissioned by Groq; the model chain fell through to ${serving}.`}
+    >
+      <code>{requested}</code> retired by Groq — running <code>{serving}</code>
+    </p>
+  );
+}
+
 export default function CopilotPanel() {
   const dispatch = useDispatch();
   const messages = useSelector(selectMessages);
@@ -95,6 +127,7 @@ export default function CopilotPanel() {
             <h2 className="copilot__title">AIVOA Copilot</h2>
           </div>
           <p className="copilot__hint">Drop complaint files or paste text below.</p>
+          <ModelLine llmEnabled={llmEnabled} models={models} />
         </div>
         <span
           className={dotClass}
