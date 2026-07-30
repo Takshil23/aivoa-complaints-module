@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as OrmSession
 
 from app.agent import tools as T
-from app.agent.llm import LLMUnavailable
+from app.agent.llm import LLMUnavailable, active_model
 from app.config import settings
 from app.db.session import get_db
 from app.services import session_service as svc
@@ -31,9 +31,13 @@ def open_session(payload: SessionQuery, db: OrmSession = Depends(get_db)) -> dic
     messages = svc.load_messages(db, record.id)
     data = svc.serialize_session(record, messages)
     data["llmEnabled"] = settings.llm_enabled
+    # `primary`/`router` are what the assignment asks for; `active*` is what Groq
+    # is actually serving, which differs once a mandated model is decommissioned.
     data["models"] = {
         "primary": settings.primary_model,
         "router": settings.router_model,
+        "activePrimary": active_model("primary"),
+        "activeRouter": active_model("router"),
     }
     return data
 
@@ -151,4 +155,9 @@ def bonus_feature(
     except ValueError as exc:
         raise HTTPException(
             status_code=502, detail=f"The model returned malformed output: {exc}"
+        ) from exc
+    except Exception as exc:  # noqa: BLE001 - Groq auth / rate limit / timeout
+        logger.exception("bonus feature %s failed", feature)
+        raise HTTPException(
+            status_code=502, detail=f"Groq call failed: {exc}"
         ) from exc

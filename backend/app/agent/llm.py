@@ -1,13 +1,21 @@
 """Groq LLM clients + a strict JSON call helper.
 
-Two models, deliberately:
+Two roles, deliberately:
 
-* `primary_model`  = gemma2-9b-it            — mandated by the assignment. Does
-  every extraction / reasoning job through JSON-only prompting, because gemma2
-  has no native tool-calling support on Groq.
-* `router_model`   = llama-3.3-70b-versatile — supports Groq native tool calling,
-  so it powers the LangGraph router node that picks which of the three mandatory
-  tools to run.
+* `primary` = gemma2-9b-it            — mandated by the assignment. Does every
+  extraction / reasoning job through JSON-only prompting, because gemma2 has no
+  native tool-calling support on Groq.
+* `router`  = llama-3.3-70b-versatile — supports Groq native tool calling, so it
+  powers the LangGraph router node that picks which of the three mandatory tools
+  to run.
+
+Both are *requested* first and both are on Groq's deprecation list — gemma2-9b-it
+was decommissioned on 2025-10-08 and llama-3.3-70b-versatile shuts down on
+2026-08-16. So each role is a **chain**: the assignment's model is attempted, and
+if Groq answers `model_decommissioned` / `model_not_found` the next live model in
+`settings.model_chain()` takes over. A dead model is remembered per-process, so
+the 404 is paid once, not once per request. `active_model()` reports what actually
+served the traffic.
 """
 
 from __future__ import annotations
@@ -15,7 +23,8 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import Any
+import threading
+from typing import Any, Callable, TypeVar
 
 from app.config import settings
 
@@ -23,9 +32,48 @@ logger = logging.getLogger(__name__)
 
 _JSON_BLOCK = re.compile(r"\{.*\}", re.DOTALL)
 
+# Groq's wording for "this model id is gone". Matched against the exception text
+# because langchain wraps the provider error rather than re-raising it typed.
+_MODEL_GONE = re.compile(
+    r"model_decommissioned|model_not_found|does not exist|has been deprecated|"
+    r"no longer supported|decommissioned",
+    re.IGNORECASE,
+)
+_JSON_MODE_UNSUPPORTED = re.compile(
+    r"response_format|json_object|json_validate_failed", re.IGNORECASE
+)
+
+T = TypeVar("T")
+
+_lock = threading.Lock()
+_dead: set[str] = set()
+_active: dict[str, str] = {}
+
 
 class LLMUnavailable(RuntimeError):
     """Raised when no Groq key is configured, or Groq cannot be reached."""
+
+
+def active_model(kind: str = "primary") -> str:
+    """The model that last served this role, or the one we would try next."""
+    if kind in _active:
+        return _active[kind]
+    chain = settings.model_chain(kind)
+    return next((m for m in chain if m not in _dead), chain[0])
+
+
+def mark_dead(model: str) -> None:
+    """Record a model as gone. Used by the probe in scripts/verify_llm.py, which
+    calls models directly rather than through the chain."""
+    with _lock:
+        _dead.add(model)
+
+
+def reset_model_cache() -> None:
+    """Forget which models are dead. Used by tests and the verify script."""
+    with _lock:
+        _dead.clear()
+        _active.clear()
 
 
 def _build(model: str, **kwargs: Any):
@@ -42,12 +90,90 @@ def _build(model: str, **kwargs: Any):
     )
 
 
+def _with_fallback(kind: str, run: Callable[[str], T]) -> T:
+    """Run `run(model)` down the chain for `kind` until a live model answers.
+
+    Only a "model is gone" error advances the chain. Anything else (bad JSON,
+    rate limit, auth failure) is raised so the caller's own fallback handles it.
+    """
+    if not settings.llm_enabled:
+        raise LLMUnavailable("GROQ_API_KEY is not set")
+
+    chain = settings.model_chain(kind)
+    # Keep a known-good model at the front so we do not re-pay a dead 404.
+    live = [m for m in chain if m not in _dead]
+    if not live:
+        raise LLMUnavailable(
+            f"No usable Groq model for '{kind}'. Tried: {', '.join(chain)}. "
+            "Check console.groq.com/docs/deprecations and update the model chain."
+        )
+    preferred = _active.get(kind)
+    if preferred in live:
+        live.remove(preferred)
+        live.insert(0, preferred)
+
+    last: Exception | None = None
+    for model in live:
+        try:
+            result = run(model)
+        except Exception as exc:  # noqa: BLE001 - classified below
+            if not _MODEL_GONE.search(str(exc)):
+                raise
+            logger.warning(
+                "Groq model %r is unavailable for %s (%s); trying next in chain",
+                model,
+                kind,
+                str(exc)[:200],
+            )
+            with _lock:
+                _dead.add(model)
+            last = exc
+            continue
+        if _active.get(kind) != model:
+            logger.info("%s role now served by %r", kind, model)
+            with _lock:
+                _active[kind] = model
+        return result
+
+    raise LLMUnavailable(
+        f"Every Groq model for '{kind}' is decommissioned ({', '.join(chain)}): {last}"
+    )
+
+
 def primary_llm(**kwargs: Any):
-    return _build(settings.primary_model, **kwargs)
+    return _build(active_model("primary"), **kwargs)
 
 
 def router_llm(**kwargs: Any):
-    return _build(settings.router_model, temperature=0.0, **kwargs)
+    return _build(active_model("router"), temperature=0.0, **kwargs)
+
+
+def chat_call(messages: list[tuple[str, str]], *, kind: str = "primary") -> str:
+    """Plain (non-JSON) completion, with model fallback. Returns the text."""
+
+    def run(model: str) -> str:
+        response = _build(model).invoke(messages)
+        return _content_text(response.content)
+
+    return _with_fallback(kind, run)
+
+
+def tool_call(messages: list[tuple[str, str]], tools: list[Any]) -> Any:
+    """Native tool-calling completion on the router chain. Returns the message."""
+
+    def run(model: str) -> Any:
+        return _build(model, temperature=0.0).bind_tools(tools).invoke(messages)
+
+    return _with_fallback("router", run)
+
+
+def _content_text(content: Any) -> str:
+    if isinstance(content, list):  # some providers return content parts
+        return "".join(
+            part.get("text", "") if isinstance(part, dict) else str(part)
+            for part in content
+        )
+    return str(content)
 
 
 def extract_json(text: str) -> dict[str, Any]:
@@ -73,28 +199,30 @@ def extract_json(text: str) -> dict[str, Any]:
     raise ValueError(f"Model did not return valid JSON: {text[:400]}")
 
 
-def json_call(system: str, user: str, *, model: str | None = None) -> dict[str, Any]:
-    """One-shot JSON completion against Groq.
+def json_call(system: str, user: str, *, kind: str = "primary") -> dict[str, Any]:
+    """One-shot JSON completion against Groq, with model fallback.
 
-    Uses Groq's JSON mode where the model supports it, and still parses
-    defensively.
+    Asks for Groq's JSON mode, drops back to plain prompting for models that
+    reject `response_format`, and parses defensively either way.
     """
-    kwargs: dict[str, Any] = {}
-    target = model or settings.primary_model
-    # Groq JSON mode is available on both configured models.
-    kwargs["model_kwargs"] = {"response_format": {"type": "json_object"}}
+    messages = [("system", system), ("human", user)]
 
-    llm = _build(target, **kwargs)
-    response = llm.invoke(
-        [
-            ("system", system),
-            ("human", user),
-        ]
-    )
-    content = response.content
-    if isinstance(content, list):  # some providers return content parts
-        content = "".join(
-            part.get("text", "") if isinstance(part, dict) else str(part)
-            for part in content
-        )
-    return extract_json(str(content))
+    def run(model: str) -> dict[str, Any]:
+        try:
+            response = _build(
+                model, model_kwargs={"response_format": {"type": "json_object"}}
+            ).invoke(messages)
+        except Exception as exc:  # noqa: BLE001
+            if _MODEL_GONE.search(str(exc)) or not _JSON_MODE_UNSUPPORTED.search(
+                str(exc)
+            ):
+                raise
+            logger.warning(
+                "%r rejected JSON mode (%s); retrying as plain completion",
+                model,
+                str(exc)[:200],
+            )
+            response = _build(model).invoke(messages)
+        return extract_json(_content_text(response.content))
+
+    return _with_fallback(kind, run)

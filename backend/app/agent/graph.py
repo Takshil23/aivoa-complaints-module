@@ -30,7 +30,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from langgraph.graph import END, START, StateGraph
 
 from app.agent import tools as T
-from app.agent.llm import LLMUnavailable, router_llm
+from app.agent.llm import LLMUnavailable, chat_call, tool_call
 from app.agent.state import AgentState
 from app.config import settings
 from app.services.form_schema import (
@@ -78,17 +78,17 @@ def router_node(state: AgentState) -> dict[str, Any]:
     # Preferred path: let the router model pick a tool.
     if settings.llm_enabled:
         try:
-            llm = router_llm().bind_tools(T.ROUTER_TOOLS)
             context = (
                 "A complaint is currently loaded on the form."
                 if loaded
                 else "The form is currently EMPTY."
             )
-            response = llm.invoke(
+            response = tool_call(
                 [
                     ("system", T.prompts.ROUTER_SYSTEM),
                     ("human", f"{context}\n\nOfficer's message:\n{text}"),
-                ]
+                ],
+                T.ROUTER_TOOLS,
             )
             calls = getattr(response, "tool_calls", None) or []
             if calls:
@@ -151,10 +151,8 @@ def answer_question_node(state: AgentState) -> dict[str, Any]:
         return {"reply": reply, "tool_used": ROUTE_ANSWER}
 
     try:
-        from app.agent.llm import primary_llm
-
         record = T._record_text(sections, state.get("risk"))
-        response = primary_llm().invoke(
+        reply = chat_call(
             [
                 (
                     "system",
@@ -165,7 +163,7 @@ def answer_question_node(state: AgentState) -> dict[str, Any]:
                 ("human", f"Current record:\n{record}\n\nQuestion: {question}"),
             ]
         )
-        return {"reply": str(response.content), "tool_used": ROUTE_ANSWER}
+        return {"reply": reply, "tool_used": ROUTE_ANSWER}
     except Exception as exc:  # noqa: BLE001
         logger.warning("answer_question failed: %s", exc)
         return {
