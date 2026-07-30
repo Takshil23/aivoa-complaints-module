@@ -482,6 +482,40 @@ button {
   flex-shrink: 0;
 }
 
+/* Header actions: New chat, then the live state dot. */
+.copilot__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.newchat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--field-border);
+  background: #fff;
+  border-radius: 999px;
+  padding: 6px 13px 6px 11px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--slate-700);
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+
+.newchat:hover:not(:disabled) {
+  border-color: var(--indigo-500);
+  color: var(--indigo-600);
+  background: var(--indigo-50);
+}
+
+.newchat:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .copilot__brand {
   display: flex;
   align-items: center;

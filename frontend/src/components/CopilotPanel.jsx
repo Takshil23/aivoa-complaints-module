@@ -2,14 +2,18 @@ import { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import Message from './Message';
 import Composer from './Composer';
-import { FlaskIcon, SparkIcon } from './icons';
+import { FlaskIcon, PlusIcon, SparkIcon } from './icons';
 import {
   selectIsStreaming,
   selectMessages,
   selectProgress,
   uploadDocument,
 } from '../store/chatSlice';
-import { selectStatus } from '../store/complaintSlice';
+import {
+  resetComplaint,
+  selectHasComplaint,
+  selectStatus,
+} from '../store/complaintSlice';
 
 function ProgressCard({ progress }) {
   return (
@@ -92,9 +96,24 @@ export default function CopilotPanel() {
   const progress = useSelector(selectProgress);
   const status = useSelector(selectStatus);
   const { llmEnabled, models } = useSelector((s) => s.complaint);
+  const hasComplaint = useSelector(selectHasComplaint);
 
   const bodyRef = useRef(null);
   const [dragging, setDragging] = useState(false);
+
+  const startNewChat = () => {
+    // Discarding an uncommitted complaint is destructive and easy to misclick,
+    // so confirm — but only when there is actually something to lose.
+    const uncommitted = hasComplaint && status === 'ready_to_commit';
+    if (uncommitted) {
+      const ok = window.confirm(
+        'Start a new chat?\n\nThe complaint currently on the form has not been ' +
+          'committed to the QMS ledger and will be discarded.',
+      );
+      if (!ok) return;
+    }
+    dispatch(resetComplaint());
+  };
 
   useEffect(() => {
     const el = bodyRef.current;
@@ -129,16 +148,28 @@ export default function CopilotPanel() {
           <p className="copilot__hint">Drop complaint files or paste text below.</p>
           <ModelLine llmEnabled={llmEnabled} models={models} />
         </div>
-        <span
-          className={dotClass}
-          title={
-            isStreaming
-              ? 'Working...'
-              : status === 'ready_to_commit'
-                ? 'Ready to commit'
-                : 'Idle'
-          }
-        />
+        <div className="copilot__actions">
+          <button
+            type="button"
+            className="newchat"
+            onClick={startNewChat}
+            disabled={isStreaming}
+            title="Clear the transcript and the form, and start a fresh complaint"
+          >
+            <PlusIcon />
+            New chat
+          </button>
+          <span
+            className={dotClass}
+            title={
+              isStreaming
+                ? 'Working...'
+                : status === 'ready_to_commit'
+                  ? 'Ready to commit'
+                  : 'Idle'
+            }
+          />
+        </div>
       </header>
 
       <div
