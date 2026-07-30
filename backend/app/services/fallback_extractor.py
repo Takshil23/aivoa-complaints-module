@@ -259,6 +259,24 @@ _EDIT_TARGETS: list[tuple[str, re.Pattern[str]]] = [
 ]
 
 
+_RUN_ON = re.compile(r"(?<=[A-Za-z0-9])and(?=\s|$).*$", re.IGNORECASE)
+
+
+def clean_batch(value: str) -> str:
+    """Split a run-on batch number: "CHG 260712Aand affected" -> "CHG 260712A".
+
+    The officers in the demo type corrections without a space before "and", so the
+    batch swallows the rest of the sentence. Applied to model output too, not just
+    the regex path — the 8B models copy the run-on verbatim however firmly the
+    prompt asks them not to, so this is a guarantee rather than a hope.
+
+    Only fires when a digit survives the cut, so a genuine token like "GRAND" is
+    left alone.
+    """
+    cleaned = _RUN_ON.sub("", value).strip(" .,;")
+    return cleaned if any(ch.isdigit() for ch in cleaned) else value
+
+
 def extract_edits(instruction: str) -> dict[str, str]:
     """Best-effort sparse patch from a correction sentence."""
     patch: dict[str, str] = {}
@@ -267,8 +285,7 @@ def extract_edits(instruction: str) -> dict[str, str]:
         if match:
             value = re.sub(r"\s+", " ", match.group(1)).strip(" .,;")
             if key == "batch_lot_number":
-                # "CHG 260712Aand affected" -> "CHG 260712A"
-                value = re.sub(r"(?<=[A-Z0-9])and$", "", value).strip()
+                value = clean_batch(value)
             if value:
                 patch[key] = value
     return patch

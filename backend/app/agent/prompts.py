@@ -24,7 +24,9 @@ Field keys you must use (all values are strings):
                             Quality Control Laboratory, Distribution
   impacted_npm            - impacted non-product material, i.e. the packaging that
                             touched the product: "Primary Packaging (Bottle)",
-                            "HDPE Drum", "Blister Foil", "Aluminium Seal"
+                            "HDPE Drum", "Blister Foil", "Aluminium Seal".
+                            If the source names the container, use that container —
+                            a complaint about a drum is never a bottle.
   complaint_category      - a QMS defect category: "Product Defect - Discoloration",
                             "Foreign Matter Contamination", "Packaging Defect",
                             "Labelling Error", "Short Shipment", "Efficacy Complaint"
@@ -32,12 +34,25 @@ Field keys you must use (all values are strings):
                             complainant, the observation, the quantity and the request.
 
 Risk assessment keys:
-  severity                - ONE OF: Critical, Major, Minor
-                            Critical = patient safety / sterility / cross-contamination
-                                       / foreign matter in an API or parenteral
-                            Major    = quality attribute affected, no immediate
-                                       patient hazard (discoloration, packaging seal)
-                            Minor    = cosmetic or documentation only
+  severity                - ONE OF: Critical, Major, Minor. Work down this list and
+                            stop at the FIRST rule that applies:
+                            1. Critical - foreign matter, particulate or visible
+                               contamination in an API, a sterile product or a
+                               parenteral. Also any sterility breach, mix-up,
+                               cross-contamination, or a defect with a plausible
+                               route to patient harm.
+                            2. Critical - a labelling or strength error that could
+                               cause a dosing mistake.
+                            3. Major    - a quality attribute is affected with no
+                               plausible route to patient harm: discoloration,
+                               packaging seal failure, short shipment.
+                            4. Minor    - cosmetic or documentation only.
+                            An API is an ingredient for someone else's medicine, so
+                            contamination in one propagates into every batch made
+                            from it. Do NOT downgrade to Major just because no
+                            patient injury has been reported yet, or because the
+                            material was quarantined in time — severity describes
+                            the hazard, not the outcome.
   suggested_next_action   - the concrete QMS routing step, e.g.
                             "Route to QA Investigation & Issue Replacement",
                             "Laboratory investigation & manufacturing record review"
@@ -46,6 +61,11 @@ Risk assessment keys:
 Rules:
 - Never invent a batch number, date or quantity that is not in the source. Use
   "Not Provided" instead.
+- The worked example at the end of these instructions is DUMMY DATA about an
+  unrelated product, present only to show the JSON shape. Never copy a value out
+  of it. Every value you return must come from the complaint in front of you, be
+  inferred from it, or be "Not Provided".
+- Fill in every field key listed above. Do not omit keys and do not add new ones.
 - You MAY infer complaint_source, originating_site_block, impacted_npm and
   complaint_category from pharmaceutical context. List every key you inferred
   rather than read directly in "inferred_fields".
@@ -61,12 +81,33 @@ about its risk.
 
 {FIELD_CONTRACT}
 
-Respond with exactly this shape:
+Write "reply" as one or two sentences addressed to the QA officer, confirming what
+you extracted. It is prose you have composed — never copy this instruction into it.
+
+Return exactly this JSON shape. The values below describe a DIFFERENT, unrelated
+complaint and exist only to show the format — do not carry any of them over:
 {{
-  "fields": {{ "complaint_source": "...", ... }},
-  "risk": {{ "severity": "...", "suggested_next_action": "...", "initial_risk_assessment": "..." }},
-  "inferred_fields": ["..."],
-  "reply": "One or two sentences to the QA officer confirming what you extracted."
+  "fields": {{
+    "complaint_source": "Distributor",
+    "customer_name": "Nordic Pharma Distribution AB",
+    "product_name": "Ibuprofen Tablets",
+    "product_strength": "200 mg",
+    "batch_lot_number": "IBU250114",
+    "affected_quantity": "3 blister strips",
+    "manufacturing_date": "January 2025",
+    "expiry_date": "December 2027",
+    "originating_site_block": "Packaging",
+    "impacted_npm": "Blister Foil",
+    "complaint_category": "Packaging Defect",
+    "complaint_description": "Nordic Pharma Distribution AB reported three blister strips with incompletely sealed pockets. Requesting investigation of the sealing station and replacement stock."
+  }},
+  "risk": {{
+    "severity": "Major",
+    "suggested_next_action": "Route to QA Investigation & Issue Replacement",
+    "initial_risk_assessment": "Probable sealing-station temperature excursion during packaging. No route to patient harm identified; product integrity beyond the affected strips is unverified."
+  }},
+  "inferred_fields": ["originating_site_block", "impacted_npm", "complaint_category"],
+  "reply": "Complaint parsed successfully. I've extracted the product and batch details for the Ibuprofen packaging defect and generated an initial risk assessment."
 }}
 """
 
@@ -85,11 +126,24 @@ Critical rules:
 
 {FIELD_CONTRACT}
 
-Respond with exactly this shape:
+Write "reply" yourself: confirm the change, name each field by its display label and
+quote the new value. It is prose addressed to the officer — never copy this
+instruction into it, and vary the opening between edits.
+
+Return exactly this JSON shape. The example is an UNRELATED edit — the officer there
+said "actually the customer is Nordic Pharma Distribution AB and expiry is January
+2029" — so patch the fields *your* officer named, not these:
 {{
-  "patch": {{ "batch_lot_number": "...", "affected_quantity": "..." }},
-  "risk": {{ "severity": "...", "suggested_next_action": "...", "initial_risk_assessment": "..." }},
-  "reply": "Confirm the change, naming each field by its display label and quoting the new value."
+  "patch": {{
+    "customer_name": "Nordic Pharma Distribution AB",
+    "expiry_date": "January 2029"
+  }},
+  "risk": {{
+    "severity": "Major",
+    "suggested_next_action": "Route to QA Investigation & Issue Replacement",
+    "initial_risk_assessment": "Unchanged: neither the complainant nor the expiry date alters the hazard."
+  }},
+  "reply": "Got it. I have updated the Customer Name to \\"Nordic Pharma Distribution AB\\" and the Expiry Date to \\"January 2029\\" in the form."
 }}
 """
 
@@ -107,13 +161,36 @@ your reply.
 
 {FIELD_CONTRACT}
 
-Respond with exactly this shape:
+Write "reply" yourself: quote the complaint reference, name the complainant and the
+core issue in one or two sentences, then end with exactly "Form populated on the
+left." It is prose you have composed — never copy this instruction into it.
+
+Return exactly this JSON shape, with every field key from the list above. The values
+describe a DIFFERENT, unrelated document and exist only to show the format — do not
+carry any of them over:
 {{
-  "fields": {{ ... }},
-  "risk": {{ ... }},
-  "inferred_fields": ["..."],
-  "document_reference": "CC-2026-00154 or empty string",
-  "reply": "Confirm extraction, naming the report and the core issue, and end with 'Form populated on the left.'"
+  "fields": {{
+    "complaint_source": "Distributor",
+    "customer_name": "Nordic Pharma Distribution AB",
+    "product_name": "Ibuprofen Tablets",
+    "product_strength": "200 mg",
+    "batch_lot_number": "IBU250114",
+    "affected_quantity": "3 blister strips",
+    "manufacturing_date": "January 2025",
+    "expiry_date": "December 2027",
+    "originating_site_block": "Packaging",
+    "impacted_npm": "Blister Foil",
+    "complaint_category": "Packaging Defect",
+    "complaint_description": "Nordic Pharma Distribution AB reported three blister strips with incompletely sealed pockets during goods-in inspection. Stock has been held pending investigation."
+  }},
+  "risk": {{
+    "severity": "Major",
+    "suggested_next_action": "Route to QA Investigation & Issue Replacement",
+    "initial_risk_assessment": "Probable sealing-station temperature excursion during packaging. No route to patient harm identified."
+  }},
+  "inferred_fields": ["originating_site_block", "impacted_npm"],
+  "document_reference": "CC-2025-00087",
+  "reply": "I've extracted complaint report CC-2025-00087 from Nordic Pharma Distribution AB. The issue is an incomplete blister seal on Ibuprofen Tablets. Form populated on the left."
 }}
 """
 
@@ -170,13 +247,18 @@ samples, environmental monitoring or supplier qualification where relevant.
 ROOT_CAUSE_SYSTEM = """You are a pharmaceutical QA investigator proposing probable
 root causes for a customer complaint, ranked by likelihood.
 
-Return JSON:
+`category` is exactly ONE fishbone category, chosen from: Man, Machine, Material,
+Method, Measurement, Environment. `likelihood` is exactly one of High, Medium, Low.
+Return a single word for each — never a list, and never the options joined by pipes
+or commas.
+
+Return JSON in this shape:
 {
   "hypotheses": [
     {
-      "cause": "the probable cause",
-      "category": "Man | Machine | Material | Method | Measurement | Environment",
-      "likelihood": "High | Medium | Low",
+      "cause": "Label reel loaded in the wrong orientation at the print station",
+      "category": "Man",
+      "likelihood": "High",
       "evidence": "what in the complaint points here",
       "test": "the check that would confirm or rule it out"
     }

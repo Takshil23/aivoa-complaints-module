@@ -30,6 +30,18 @@ from app.services.form_schema import (
 logger = logging.getLogger(__name__)
 
 
+def _sanitize(fields: dict[str, str]) -> dict[str, str]:
+    """Normalise model-produced field values.
+
+    The prompt asks for a run-on batch number to be split; the small models often
+    return it whole anyway, so enforce it in code. Applies to the LLM path and the
+    deterministic path alike, so both behave identically.
+    """
+    if fields.get("batch_lot_number"):
+        fields["batch_lot_number"] = fb.clean_batch(fields["batch_lot_number"])
+    return fields
+
+
 def _record_text(sections: list[dict[str, Any]], risk: dict[str, str] | None) -> str:
     """Serialise the current record for a prompt."""
     payload = {"fields": flatten(sections), "risk": risk or {}}
@@ -43,7 +55,10 @@ def log_complaint(raw_text: str) -> dict[str, Any]:
     if settings.llm_enabled:
         try:
             result = json_call(prompts.LOG_COMPLAINT_SYSTEM, raw_text)
-        except (LLMUnavailable, ValueError) as exc:
+        # Deliberately broad: a bad key, a rate limit, a timeout or malformed
+        # JSON must all degrade to the deterministic extractor, never 500 the
+        # officer's request.
+        except Exception as exc:  # noqa: BLE001
             logger.warning("log_complaint LLM path failed (%s); using fallback", exc)
             result = fb.extract(raw_text)
     else:
@@ -77,17 +92,19 @@ def edit_complaint(
         )
         try:
             result = json_call(prompts.EDIT_COMPLAINT_SYSTEM, user)
-            patch = {
-                k: str(v)
-                for k, v in (result.get("patch") or {}).items()
-                if k in labels and str(v).strip()
-            }
+            patch = _sanitize(
+                {
+                    k: str(v)
+                    for k, v in (result.get("patch") or {}).items()
+                    if k in labels and str(v).strip()
+                }
+            )
             if result.get("risk"):
                 new_risk.update(
                     {k: str(v) for k, v in result["risk"].items() if str(v).strip()}
                 )
             reply = str(result.get("reply") or "")
-        except (LLMUnavailable, ValueError) as exc:
+        except Exception as exc:  # noqa: BLE001 - see log_complaint
             logger.warning("edit_complaint LLM path failed (%s); using fallback", exc)
 
     if not patch:
@@ -130,7 +147,7 @@ def extract_document(document_text: str, filename: str = "") -> dict[str, Any]:
         try:
             user = f"Filename: {filename}\n\nDocument text:\n{document_text}"
             result = json_call(prompts.EXTRACT_DOCUMENT_SYSTEM, user)
-        except (LLMUnavailable, ValueError) as exc:
+        except Exception as exc:  # noqa: BLE001 - see log_complaint
             logger.warning("extract_document LLM path failed (%s); using fallback", exc)
             result = fb.extract(document_text)
     else:
@@ -139,19 +156,27 @@ def extract_document(document_text: str, filename: str = "") -> dict[str, Any]:
     state = _build_populated(result)
     state["tool_used"] = "extract_document"
 
+    # The prompt asks the model to quote the reference and to close on the demo's
+    # sign-off line. Only repair what it actually missed — unconditionally wrapping
+    # its reply produced two "extracted the complaint report" clauses in a row.
+    body = state["reply"].strip()
     reference = str(result.get("document_reference") or "").strip()
-    if reference and reference not in state["reply"]:
-        state["reply"] = (
+    if reference and reference not in body:
+        body = (
             f"PDF analysis complete. I've successfully extracted complaint report "
-            f"({reference}). {state['reply']} Form populated on the left."
+            f"{reference}. {body}"
         )
+    tail = "Form populated on the left."
+    if not body.endswith(tail):
+        body = f"{body.rstrip()} {tail}".lstrip()
+    state["reply"] = body
     return state
 
 
 # --- shared -------------------------------------------------------------------
 
 def _build_populated(result: dict[str, Any]) -> dict[str, Any]:
-    fields = {k: str(v) for k, v in (result.get("fields") or {}).items()}
+    fields = _sanitize({k: str(v) for k, v in (result.get("fields") or {}).items()})
     for key in (
         "complaint_source",
         "customer_name",
